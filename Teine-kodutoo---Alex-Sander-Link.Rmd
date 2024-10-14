@@ -1,0 +1,435 @@
+---
+title: "Teine ülesanne - Olympic Dataset"
+author: "Alex Sander Link"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(rvest)
+library(forcats)
+library(gridExtra)
+library(grid)
+knitr::opts_chunk$set(fig.width=6, fig.height=5)  # Määrab kõikide jooniste laiuse 
+```
+
+```{r, include = FALSE}
+olympic_data <- read_csv("athlete_events.csv")
+populations <- read_csv("population.csv", skip = 4)
+```
+
+```{r, include = FALSE}
+url <- "https://tradingeconomics.com/country-list/temperature"
+webpage <- read_html(url)
+temperature_table <- html_node(webpage, "table")
+temperature_data <- html_table(temperature_table)
+```
+
+```{r, include = FALSE}
+olympic_data <- olympic_data %>%
+  left_join(temperature_data %>% select(Country, Last),
+            by = c("Team" = "Country"))
+olympic_data <- olympic_data %>%
+  rename(Avg_Temperature = Last)
+```
+
+# Andmestiku Kirjeldus
+
+Andmestik sisaldab infot olümpiamängudel osalenud sportlaste kohta, sealhulgas nende nimi, vanus, pikkus, kaal, sport, võistlusala ja võidetud medalid (kuld, hõbe, pronks). Lisaks on kaasatud riikide keskmised temperatuurid ja populatsioonid aastate lõikes, et uurida, kuidas need tegurid võivad mõjutada sportlaste sooritusi ja riikide tulemusi olümpiamängudel.
+
+### Allikad
+
+Andmestik on koostatud mitmest erinevast allikast, sealhulgas:
+
+1.  **Olümpiamängude andmestik**: Pärineb Kaggle'i andmestikust "[120 Years of Olympic History: Athletes and Results](https://www.kaggle.com/datasets/heesoo37/120-years-of-olympic-history-athletes-and-results)", mis sisaldab kogu kaasaegse olümpiaajaloo andmeid aastatest 1896 kuni 2016. Andmed on kraabitud veebisaidilt [www.sports-reference.com](http://www.sports-reference.com), kus on koondatud olümpiamängude tulemused, sportlased ja nende medalid.
+
+2.  **Temperatuuride andmestik**: Pärineb Kaggle'i andmestikust "[Daily Temperature of Major Cities](https://www.kaggle.com/datasets/sudalairajkumar/daily-temperature-of-major-cities)", mis sisaldab suurte linnade keskmisi päevaseid temperatuure. Need andmed võimaldavad uurida, kas riikide kliima võib mõjutada olümpiatulemusi.
+
+3.  **Rahvastiku andmestik**: Pärineb World Bank'i andmebaasist "[Population, total](https://data.worldbank.org/indicator/SP.POP.TOTL)", mis sisaldab iga riigi rahvaarvu alates 1960. aastast. Need andmed võimaldavad uurida, kas suurema rahvaarvuga riigid on olümpiamängudel edukamad.
+
+### Kasutusalad
+
+Andmed on väärtuslikud teadlastele ja spordianalüütikutele, kes soovivad uurida, kuidas sportlaste omadused (nagu vanus, pikkus ja kaal), kliimatingimused ning riikide suurus ja majanduslikud tegurid mõjutavad riikide edukust olümpiamängudel. Need andmed võimaldavad vastata mitmesugustele küsimustele, sealhulgas:
+
+-   Kuidas mõjutavad kliimatingimused (keskmine temperatuur) riikide võimekust medalite võitmisel?
+-   Kas suurema populatsiooniga riigid on olümpial edukamad?
+-   Kuidas on sportlaste vanus, pikkus ja kaal muutunud ajas ning kas need omadused mõjutavad nende võimalusi medalit võita?
+
+------------------------------------------------------------------------
+
+# Uurimisküsimused ja Hüpoteesid
+
+### Uurimisküsimused
+
+-   **Küsimus 1**: Kas riikide keskmine temperatuur mõjutab medalite arvu suveolümpiamängudel?
+
+-   **Küsimus 2**: Kas kõrgemad ja raskemad sportlased on suurema tõenäosusega medalivõitjad?
+
+-   **Küsimus 3**: Kuidas on sportlaste keskmine vanus ajas muutunud ja kas see erineb meeste ja naiste lõikes?
+
+### Hüpoteesid
+
+-   **H1**: Madalama keskmise temperatuuriga riigid on edukamad kestvusaladel, kus jahedamad kliimatingimused võivad anda eeliseid (nt maraton, triatlon).
+
+-   **H2**: Riikide populatsiooni suurus korreleerub medalite arvuga, kuna suurema populatsiooniga riikidel on tõenäoliselt suurem valik andekaid sportlasi ja parem infrastruktuur tippspordi arendamiseks.
+
+------------------------------------------------------------------------
+
+# Kirjeldav Analüüs
+
+## Andmestiku esimesed read
+
+**Olümpia andmestik + keskmised temperatuurid**
+
+```{r, echo = FALSE}
+head(olympic_data)
+```
+
+**Populatsiooni andmed**
+
+```{r, echo = FALSE}
+head(populations)
+```
+
+## Statistika: Vanus, Pikkus ja Kaal
+
+Esimene analüüs keskendub sportlaste vanuse, pikkuse ja kaalu statistilisele kokkuvõttele. Siin on välja toodud olümpiamängudel osalenud sportlaste peamised füüsilised omadused.
+
+```{r, echo = FALSE}
+summary(olympic_data %>% select(Age, Height, Weight))
+```
+
+**Vanus:** Enamik olümpiasportlasi on 20–30-aastased, mediaanvanus 24 aastat.
+
+**Pikkus:** Keskmine pikkus on 175 cm, kuid sportlaste pikkus varieerub suuresti, sõltuvalt spordialast. 
+
+**Kaal:** Keskmine kaal on 70 kg, kuid kaaluvahemik on lai (25 kg kuni 214 kg), sõltudes samuti spordialast. 
+
+**Puuduvad andmed:** Märkimisväärne osa sportlastest (nt pikkuse ja kaalu kohta) on puuduvaid andmeid, mis võib mõjutada analüüsi täpsust.
+
+## Sportlaste vanuse jaotus
+
+Järgnevalt uurime sportlaste vanuse jaotust histogrammi abil, et näha, millises vanuses sportlased olümpiamängudel kõige sagedamini osalevad.
+
+```{r, echo = FALSE}
+ggplot(olympic_data, aes(x = Age)) +
+  geom_histogram(binwidth = 2, fill = "blue", color = "black") +
+  ggtitle("Distribution of Athletes' Age") +
+  xlab("Vanus") +
+  ylab("Sportlaste arv")
+```
+
+Histogramm näitab, et enamik sportlasi on 20–30 aasta vanused. See on ootuspärane, kuna selles vanuses on sportlased tavaliselt oma füüsilise võimekuse tipus. Vähem sportlasi on vanuses üle 35 aasta, kuigi on ka mõningaid erandeid, eriti spordialadel, mis ei nõua nii suurt füüsilist vastupidavust. Nooremaid sportlasi (alla 20-aastaseid) on samuti vähe, kuigi mõned alad, nagu näiteks võimlemine, võivad hõlmata väga noori sportlasi.
+
+## Vanuse jaotus kümnendite lõikes
+
+Selles analüüsis uurime, kuidas on olümpiasportlaste vanuse jaotus muutunud aja jooksul. Jaotame andmed kümnendite kaupa, et näha, kas sportlaste vanuses esineb mingeid mustreid erinevatel ajaperioodidel.
+
+```{r, include = FALSE}
+olympic_data <- olympic_data %>%
+  mutate(Decade = cut(Year, breaks = seq(1890, 2020, by = 10), right = FALSE, labels = seq(1890, 2010, by = 10)))
+```
+
+```{r, echo = FALSE}
+ggplot(olympic_data %>% filter(!is.na(Decade)), aes(x = Age, fill = Decade)) +
+  geom_histogram(binwidth = 2, position = "dodge", color = "black") +
+  facet_wrap(~ Decade, ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.01))) + 
+  ggtitle("Distribution of Athletes' Age by Decades") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.2),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    strip.text = element_text(size = 8)
+  )
+
+
+```
+
+**Enne 1950. aastat:** Vanuse jaotused olid mitmekesisemad ja osalejate arv väiksem, eriti varasematel kümnenditel. Suurimad vanuserühmad olid 20–30-aastased sportlased, kuid osalejaid oli vähe võrreldes hilisemate kümnenditega. 
+**Pärast 1950. aastat:** Olümpiamängude populaarsus ja osalejate arv kasvas märgatavalt. Sportlaste vanus on stabiilselt 20–30 aasta vahemikus, kusjuures hilisematel aastakümnetel domineerivad nooremad sportlased vanuses 20–25 aastat.
+
+## Medalite arv riigi ja hooaja järgi
+
+Selles analüüsis uurime, millised riigid on võitnud kõige rohkem medaleid olümpiamängudel, eraldi suve- ja talimängude arvestuses. Analüüs keskendub 15 edukaimale riigile, ning vaadeldakse nende medalite jaotust suve- ja talimängudel.
+
+```{r, include = FALSE}
+medals_by_country <- olympic_data %>%
+  group_by(Team, Season) %>%
+  summarise(Medal_Count = sum(!is.na(Medal)))
+
+```
+
+```{r, echo = FALSE}
+top_countries <- medals_by_country %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = sum(Medal_Count)) %>%
+  top_n(15, Total_Medals) %>%
+  arrange(desc(Total_Medals))
+
+medals_top <- medals_by_country %>%
+  filter(Team %in% top_countries$Team)
+
+ggplot(medals_top, aes(x = reorder(Team, -Medal_Count, sum), y = Medal_Count, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  ggtitle("Top 15 Countries by Medals Won (Summer and Winter)") +
+  xlab("Country") +
+  ylab("Medal Count") +
+  theme_minimal()
+```
+
+## Top 15 riiki suve- ja taliolümpiamängudel
+
+Selles osas analüüsime, millised riigid on olnud kõige edukamad suve- ja taliolümpiamängudel. Kuvame 15 edukaimat riiki, sorteerituna nende võidetud medalite arvu järgi.
+
+```{r, echo = FALSE}
+top_summer_countries <- medals_by_country %>%
+  filter(Season == "Summer") %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = sum(Medal_Count)) %>%
+  top_n(15, Total_Medals)
+
+medals_top_summer <- medals_by_country %>%
+  filter(Team %in% top_summer_countries$Team & Season == "Summer")
+
+medals_top_summer$Team <- fct_reorder(medals_top_summer$Team, medals_top_summer$Medal_Count)
+
+top_winter_countries <- medals_by_country %>%
+  filter(Season == "Winter") %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = sum(Medal_Count)) %>%
+  top_n(15, Total_Medals)
+
+medals_top_winter <- medals_by_country %>%
+  filter(Team %in% top_winter_countries$Team & Season == "Winter")
+
+medals_top_winter$Team <- fct_reorder(medals_top_winter$Team, medals_top_winter$Medal_Count)
+
+p1 <- ggplot(medals_top_summer, aes(x = Team, y = Medal_Count, fill = Team)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+p2 <- ggplot(medals_top_winter, aes(x = Team, y = Medal_Count, fill = Team)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip()  +
+  theme(legend.position = "none")
+
+grid.arrange(p1, p2, ncol = 2, top = textGrob("Comparison of Top 15 Countries by Medals Won in Summer and Winter Olympics", 
+                                              gp = gpar(fontsize = 10, fontface = "bold")))
+```
+
+Edukamad riigid suveolümpial pärinevad tihti suurematest ja tihedamalt asustatud riikidest, samas kui talimängudel domineerivad riigid, millel on külmem kliima ja suurem talisporditraditsioon.
+
+## Riigi keskmise temperatuuri ja medalite korrelatsioon
+
+Selles osas analüüsime, kas riigi keskmine temperatuur on seotud medalite arvuga suve- ja talveolümpiamängudel. Kasutame hajuvusdiagramme ja lisame neile kõverjoonelise regressiooni, et näha üldisi mustreid.
+
+```{r, echo = FALSE}
+summer_medals_temp <- olympic_data %>%
+  filter(Season == "Summer" & !is.na(Avg_Temperature) & !is.na(Medal)) %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = sum(!is.na(Medal)),
+            Avg_Temperature = mean(Avg_Temperature, na.rm = TRUE))
+
+ggplot(summer_medals_temp, aes(x = Avg_Temperature, y = Total_Medals)) +
+  geom_point(aes(color = Total_Medals), size = 3, alpha = 0.7) +  
+  scale_color_gradient(low = "lightgreen", high = "darkgreen") +
+  geom_smooth(method = "loess", color = "darkred", linetype = "solid", size = 1.5, se = FALSE) + 
+  ggtitle("Relationship Between Temperature and Medals Won in Summer Olympics") +
+  xlab("Average Temperature (\u00B0C)") + 
+  ylab("Total Medals Won") +
+  scale_x_continuous(limits = c(min(summer_medals_temp$Avg_Temperature), max(summer_medals_temp$Avg_Temperature))) + 
+  scale_y_continuous(limits = c(0, max(summer_medals_temp$Total_Medals))) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12)
+  )
+```
+
+```{r, echo = FALSE}
+winter_medals_temp <- olympic_data %>%
+  filter(Season == "Winter" & !is.na(Avg_Temperature) & !is.na(Medal)) %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = sum(!is.na(Medal)),
+            Avg_Temperature = mean(Avg_Temperature, na.rm = TRUE))
+
+ggplot(winter_medals_temp, aes(x = Avg_Temperature, y = Total_Medals)) +
+  geom_point(aes(color = Total_Medals), size = 3, alpha = 0.7) +  
+  scale_color_gradient(low = "lightblue", high = "darkblue") +  
+  geom_smooth(method = "loess", color = "darkred", linetype = "solid", size = 1.5, se = FALSE) +  
+  ggtitle("Relationship Between Temperature and Medals Won in Winter Olympics") +
+  xlab("Average Temperature (\u00B0C)") +  
+  ylab("Total Medals Won") +
+  scale_x_continuous(limits = c(min(winter_medals_temp$Avg_Temperature), max(winter_medals_temp$Avg_Temperature))) +  
+  scale_y_continuous(limits = c(0, max(winter_medals_temp$Total_Medals))) + 
+  theme_minimal() +  
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12)
+  )
+```
+
+Keskmisel temperatuuril ei tundu olevat tugevat mõju **suveolümpiamängude** medalivõitudele. Edu tõenäoliselt sõltub rohkem teistest teguritest, nagu riigi suurus, majanduslikud ressursid ja spordi infrastruktuur.
+
+**Talveolümpiamängudel** on ilmne, et külmemate piirkondade riigid on oluliselt edukamad, mis on ootuspärane, arvestades nende talispordi traditsioone ja eeldatavalt paremaid treeningtingimusi külmades oludes.
+
+## Medalite arv suve- ja talveolümpiamängude aastate lõikes
+
+Selles analüüsis vaatleme, kuidas medalite arv on muutunud läbi aastate nii suve- kui talveolümpiamängudel. Visualiseerime seda, et näha, kas olümpiamängude populaarsus ja riikide osalus on aja jooksul kasvanud, ning kuidas see on mõjutanud võidetud medalite arvu.
+
+```{r, echo = FALSE}
+summer_medals_year <- olympic_data %>%
+  filter(Season == "Summer" & !is.na(Medal)) %>%
+  group_by(Year) %>%
+  summarise(Total_Medals = sum(!is.na(Medal)))
+
+winter_medals_year <- olympic_data %>%
+  filter(Season == "Winter" & !is.na(Medal)) %>%
+  group_by(Year) %>%
+  summarise(Total_Medals = sum(!is.na(Medal)))
+
+ggplot() +
+  geom_line(data = summer_medals_year, aes(x = Year, y = Total_Medals, color = "Summer"), size = 1.2) +
+  geom_line(data = winter_medals_year, aes(x = Year, y = Total_Medals, color = "Winter"), size = 1.2) +
+  scale_color_manual(values = c("Summer" = "darkgreen", "Winter" = "darkblue")) + 
+  ggtitle("Total Medals Won by Year in Summer and Winter Olympics") +
+  xlab("Year") +
+  ylab("Total Medals Won") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    legend.title = element_blank(),  
+    legend.position = "top" 
+  )
+```
+
+Aastate jooksul on medalite arv nii suve- kui talveolümpiamängudel pidevalt kasvanud, peegeldades olümpiamängude rahvusvahelist laienemist ja mitmekesisust.
+
+Suveolümpiamängude populaarsus ja osalejate arv on pidevalt suurenenud alates 1950ndatest, samal ajal kui talimängude puhul on tõus olnud stabiilsem, kuid aeglasem.
+
+## Vanuse jaotus suve- ja talveolümpiamängudel
+
+Selles osas vaatleme, kuidas sportlaste vanus jaguneb suve- ja talveolümpiamängudel. Kombineerime suve- ja talveolümpiamängude andmed, et näha üldisi mustreid sportlaste vanuse kohta.
+
+```{r,  echo = FALSE}
+summer_age <- olympic_data %>%
+  filter(Season == "Summer" & !is.na(Age))
+
+winter_age <- olympic_data %>%
+  filter(Season == "Winter" & !is.na(Age))
+
+ggplot() +
+  geom_histogram(data = summer_age, aes(x = Age, fill = "Summer"), binwidth = 2, alpha = 0.5, color = "black") +
+  geom_histogram(data = winter_age, aes(x = Age, fill = "Winter"), binwidth = 2, alpha = 0.5, color = "black") +
+  scale_fill_manual(values = c("Summer" = "#FF6347", "Winter" = "#4682B4")) + 
+  ggtitle("Age Distribution of Athletes in Summer and Winter Olympics") +
+  xlab("Age") +
+  ylab("Count") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    legend.title = element_blank(),  
+    legend.position = "top" )
+```
+
+**Suveolümpiamängud:** Suveolümpiamängudel on sportlaste vanuse jaotus laiem ja suurem osa sportlasi jääb vahemikku 20–30 aastat. On märgata, et osalejate arv hakkab langema pärast 30. eluaastat, kuid siiski on vanusejaotuses ka sportlasi, kes on üle 30-aastased ja isegi 40-aastased.
+
+**Talimängud:** Talimängudel on vanuse jaotus sarnane, kuid talimängudel domineerivad pigem nooremad sportlased (20–30 aastat). Talimängudel osaleb võrreldes suveolümpiamängudega vähem sportlasi üle 30 aasta.
+
+**Võrdlus:** Mõlemas jaotuses on noored sportlased (20–30 aastat) enim esindatud, kuid suveolümpiamängudel on laiem vanusevahemik, mis tähendab, et teatud spordialad lubavad sportlastel jätkata aktiivset karjääri kauem. Talimängudel on osalejate vanus kitsamalt keskendunud nooremasse vanusevahemikku.
+
+## Pikkuse ja kaalu seos suve- ja talveolümpiamängudel
+
+Analüüsime, kuidas sportlaste pikkuse ja kaalu vahelised seosed erinevad suve- ja talveolümpiamängudel. Kasutame hajuvusdiagramme, et visualiseerida need seosed ning lisame regressioonijoone, et näha üldist mustrit.
+
+```{r, echo = FALSE}
+ggplot(olympic_data %>% filter(Season == "Summer" & !is.na(Height) & !is.na(Weight)), 
+       aes(x = Height, y = Weight)) +
+  geom_point(alpha = 0.5, color = "darkgreen") +
+  geom_smooth(method = "lm", color = "red", linetype = "solid") + 
+  ggtitle("Relationship Between Height and Weight in Summer Olympics") +
+  xlab("Height (cm)") +
+  ylab("Weight (kg)") +
+  theme_minimal()
+```
+
+```{r, echo = FALSE}
+ggplot(olympic_data %>% filter(Season == "Winter" & !is.na(Height) & !is.na(Weight)), 
+       aes(x = Height, y = Weight)) +
+  geom_point(alpha = 0.5, color = "darkblue") +
+  geom_smooth(method = "lm", color = "red", linetype = "solid") +  
+  ggtitle("Relationship Between Height and Weight in Winter Olympics") +
+  xlab("Height (cm)") +
+  ylab("Weight (kg)") +
+  theme_minimal()
+```
+
+Mõlemas graafikus on pikkuse ja kaalu vahel tugev seos, kuid suveolümpial osalevad sportlased kipuvad olema veidi kõrgemad ja raskemad. Talimängudel on osalejad rohkem koondunud keskmise pikkuse ja kaalu vahemikku.
+
+Talimängude puhul võivad sportlased vajada suuremat jõudu ja vastupidavust, mis tähendab, et teatud kaaluga sportlased domineerivad, samas kui suvemängude puhul on rohkem variatsioone erinevate spordialade vahel.
+
+## Populatsiooni ja medalite võitmise seos (1960 vs 2020)
+
+Selles analüüsis uurime, kuidas riikide populatsioonid 1960. ja 2020. aastal on seotud nende olümpiamängudel võidetud medalite arvuga. Kasutame logaritmilisi skaalasid, et paremini näha seoseid, ning kuvame eraldi graafikud mõlema aasta kohta.
+
+```{r, echo = FALSE}
+pop_long <- populations %>%
+  pivot_longer(cols = matches("19[0-9]{2}|20[0-9]{2}"), names_to = "Year", values_to = "Population") %>%
+  filter(Year %in% c("1960", "2020")) 
+
+medals_by_country <- olympic_data %>%
+  filter(!is.na(Medal)) %>%
+  group_by(Team) %>%
+  summarise(Total_Medals = n())
+
+olympic_with_population <- medals_by_country %>%
+  left_join(pop_long, by = c("Team" = "Country Name"))
+
+head(olympic_with_population)
+
+ggplot(olympic_with_population %>% filter(!is.na(Population) & !is.na(Total_Medals)), 
+       aes(x = Population, y = Total_Medals)) +
+  geom_point(alpha = 0.6, color = "darkorange") +
+  geom_smooth(method = "lm", se = FALSE, color = "darkred") + 
+  ggtitle("Relationship Between Population and Medals Won (1960 vs 2020)") +
+  xlab("Population (Log Scale)") +
+  ylab("Total Medals Won (Log Scale)") +
+  theme_minimal() +
+  scale_x_log10() +  
+  scale_y_log10() + 
+  facet_wrap(~ Year)  
+```
+
+------------------------------------------------------------------------
+
+
+# Järeldused ja Prognoosid
+## Analüüsi käigus tuvastasime järgmised olulised järeldused:
+
+**Populatsiooni ja medalite korrelatsioon:** Tugev korrelatsioon ilmneb riigi populatsiooni ja medalite arvu vahel nii 1960. kui ka 2020. aastal. See tähendab, et riigid, millel on suuremad rahvaarvud ja suuremad ressursid, on olümpiamängudel üldiselt edukamad.
+
+**Pikkuse ja kaalu seos:** Sportlaste puhul, nii suve- kui talveolümpiamängudel, on selge positiivne korrelatsioon pikkuse ja kaalu vahel. Pikemad sportlased kipuvad olema raskemad, mis on oodatav tulemus, eriti spordialadel, kus kehamass ja jõud mängivad olulist rolli (nt viskespordialad ja kontaktspordialad).
+
+**Aja mõju medalivõitudele:** Aastate lõikes on medalite arv mõlemas olümpiaformaadis – suvel ja talvel – kasvanud, mis peegeldab olümpiamängude rahvusvahelist laienemist ja suuremat osalejate hulka. Suveolümpiamängudel on medalite arvu kasv olnud oluliselt kiirem kui talimängudel, kuid mõlemad näitavad selgelt suurenevat trendi.
+
+## Prognoosid:
+**Rahvaarv ja edukus tulevikus:** Arvestades, et suuremad rahvaarvudega riigid omavad suuremat osakaalu medalivõitudes, võib tulevikus eeldada, et riigid, nagu Hiina ja India, jätkavad medalite arvu suurendamist. Väiksemate rahvaarvudega riigid saavad jätkuvalt olla edukad spetsialiseeritud spordialadel, kuid nende võimalused laiemas pildis võivad väheneda.
+
+**Kliima mõju:** Riigid, kus kliima on jahedam ja sportlased saavad harjutada kestvusspordialasid optimaalsel temperatuuril, võivad ka tulevikus olla edukad vastupidavusaladel. See eeldus võib eriti paika pidada pikamaajooksude ja rattasõidu puhul, kus vastupidavus ja füüsiline vorm on kriitilised tegurid.
